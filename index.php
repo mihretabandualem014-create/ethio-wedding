@@ -2,7 +2,7 @@
 require_once 'db.php';
 
 // ── Handle wish submission ──────────────────────────────────────────────────
-$wishSuccess = false;
+$wishSuccess = isset($_GET['wished']);
 $wishError   = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['wish_name'])) {
@@ -19,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['wish_name'])) {
         try {
             $stmt = getDB()->prepare('INSERT INTO wishes (name, message) VALUES (?, ?)');
             $stmt->execute([$name, $message]);
-            $wishSuccess = true;
+            header('Location: index.php?wished=1#wishes');
+            exit;
         } catch (PDOException $e) {
             $wishError = 'Something went wrong. Please try again.';
         }
@@ -29,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['wish_name'])) {
 // ── Fetch data ──────────────────────────────────────────────────────────────
 $previewPhotos = [];
 try {
-    $stmt          = getDB()->query('SELECT filename FROM photos ORDER BY id DESC LIMIT 8');
+    $stmt          = getDB()->query('SELECT filename FROM photos ORDER BY id DESC');
     $previewPhotos = $stmt->fetchAll();
 } catch (PDOException $e) {}
 
@@ -65,7 +66,6 @@ try {
         <li><a href="#gallery">Gallery</a></li>
         <li><a href="#videos">Videos</a></li>
         <li><a href="#wishes">Wishes</a></li>
-        <li><a href="upload.php">Upload Photo</a></li>
       </ul>
     </div>
   </nav>
@@ -85,7 +85,7 @@ try {
       <p class="hero-tagline">Happily Ever After</p>
       <div class="hero-cta">
         <a href="#wishes" class="btn btn-primary">Leave a Wish &nbsp;♥</a>
-        <a href="upload.php" class="btn btn-outline">Share a Photo</a>
+        <a href="#gallery" class="btn btn-outline">View Gallery</a>
       </div>
     </div>
     <div class="hero-scroll" onclick="document.getElementById('gallery').scrollIntoView({behavior:'smooth'})">
@@ -105,30 +105,21 @@ try {
       </div>
 
       <?php if (!empty($previewPhotos)): ?>
-        <div class="gallery-grid">
-          <?php foreach ($previewPhotos as $photo): ?>
+        <div class="gallery-grid" id="galleryGrid">
+          <?php foreach ($previewPhotos as $i => $photo): ?>
             <?php $src = 'uploads/' . htmlspecialchars($photo['filename']); ?>
-            <div class="gallery-item" onclick="openLightbox('<?= $src ?>')">
+            <div class="gallery-item<?= $i >= 8 ? ' gallery-hidden' : '' ?>" onclick="openLightbox('<?= $src ?>')">
               <img src="<?= $src ?>" alt="Wedding photo" loading="lazy">
             </div>
           <?php endforeach; ?>
         </div>
+        <?php if (count($previewPhotos) > 8): ?>
         <div class="text-center mt-3">
-          <a href="gallery.php" class="btn btn-outline">View All Photos</a>
-          &nbsp;&nbsp;
-          <a href="upload.php" class="btn btn-primary">Upload a Photo</a>
+          <button class="btn btn-outline" id="viewMoreBtn" onclick="showAllPhotos()">View More Photos</button>
         </div>
+        <?php endif; ?>
       <?php else: ?>
-        <div class="gallery-mosaic">
-          <a href="upload.php" class="gallery-mosaic-tile">📷</a>
-          <a href="upload.php" class="gallery-mosaic-tile">✦</a>
-          <a href="upload.php" class="gallery-mosaic-tile">♥</a>
-          <a href="upload.php" class="gallery-mosaic-tile">✦</a>
-          <a href="upload.php" class="gallery-mosaic-tile">✦</a>
-        </div>
-        <div class="text-center">
-          <a href="upload.php" class="btn btn-primary">Upload the First Photo</a>
-        </div>
+        <p class="text-center" style="color:var(--muted);font-style:italic;">Photos coming soon.</p>
       <?php endif; ?>
     </div>
   </section>
@@ -256,13 +247,17 @@ try {
     <p><?= htmlspecialchars(WEDDING_DATE) ?></p>
     <p>
       <a href="#gallery">Gallery</a> &nbsp;&middot;&nbsp;
-      <a href="#wishes">Wishes</a>   &nbsp;&middot;&nbsp;
-      <a href="upload.php">Upload</a>
+      <a href="#wishes">Wishes</a>
     </p>
     <p style="margin-top:1.5rem;font-size:0.72rem;opacity:0.35;">Made with love ♥</p>
   </footer>
 
   <script>
+    function showAllPhotos() {
+      document.querySelectorAll('.gallery-hidden').forEach(function(el) { el.style.display = ''; });
+      document.getElementById('viewMoreBtn').style.display = 'none';
+    }
+
     document.getElementById('navToggle').addEventListener('click', function () {
       document.getElementById('navLinks').classList.toggle('open');
     });

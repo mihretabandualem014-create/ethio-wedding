@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/heliasa1/public_html/wedding/
+    - /bin/cp -R . $DEPLOYPATH

@@ -28,7 +28,7 @@ define('MAX_IMAGE_WIDTH', 1000);             // px
 define('JPEG_QUALITY',    85);
 
 // Admin password — change this before deploying!
-define('ADMIN_PASSWORD', 'change-me-before-deploy');
+define('ADMIN_PASSWORD', 'adminwedding123!');
 
 // ============================================================
 // DATABASE CONNECTION

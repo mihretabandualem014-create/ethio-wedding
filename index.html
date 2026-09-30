@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deva &amp; Ayinu — Our Wedding</title>
+  <meta name="description" content="Join us to celebrate the wedding of Deva and Ayinu. Share your wishes and photos.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Great+Vibes&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+
+  <!-- NAVIGATION -->
+  <nav class="site-nav on-hero" id="siteNav">
+    <div class="nav-inner">
+      <span class="nav-logo">D &amp; A</span>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="active">Home</a></li>
+        <li><a href="gallery.php">Gallery</a></li>
+        <li><a href="#videos">Videos</a></li>
+        <li><a href="#wishes">Wishes</a></li>
+        <li><a href="upload.php">Upload Photo</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <section class="hero" id="hero" style="background-image:url('hero-image.jpg');">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <p class="hero-eyebrow">We Are Getting Married</p>
+      <h1 class="couple-names">
+        Deva
+        <span class="couple-amp">and</span>
+        Ayinu
+      </h1>
+      <div class="ornament"><span>♥</span></div>
+      <p class="hero-date">24 &nbsp;&middot;&nbsp; 01 &nbsp;&middot;&nbsp; 2018</p>
+      <p class="hero-tagline">Happily Ever After</p>
+      <div class="hero-cta">
+        <a href="#wishes" class="btn btn-primary">Leave a Wish &nbsp;♥</a>
+        <a href="upload.php" class="btn btn-outline">Share a Photo</a>
+      </div>
+    </div>
+    <div class="hero-scroll" onclick="document.getElementById('gallery').scrollIntoView({behavior:'smooth'})">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </div>
+  </section>
+
+  <section class="section gallery-section" id="gallery">
+    <div class="container">
+      <div class="section-title">
+        <h2>Gallery</h2>
+        <div class="ornament"><span>✦</span></div>
+        <p class="sub">Moments captured by our guests</p>
+      </div>
+      <div class="gallery-mosaic">
+        <a href="gallery.php" class="gallery-mosaic-tile">📷</a>
+        <a href="gallery.php" class="gallery-mosaic-tile">✦</a>
+        <a href="gallery.php" class="gallery-mosaic-tile">♥</a>
+        <a href="gallery.php" class="gallery-mosaic-tile">✦</a>
+        <a href="gallery.php" class="gallery-mosaic-tile">✦</a>
+      </div>
+      <div class="text-center">
+        <a href="gallery.php" class="btn btn-outline">View All Photos</a>
+        &nbsp;&nbsp;
+        <a href="upload.php" class="btn btn-primary">Upload a Photo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- VIDEOS -->
+  <section class="section video-section" id="videos">
+    <div class="container">
+      <div class="section-title">
+        <h2>Our Videos</h2>
+        <div class="ornament"><span>✦</span></div>
+        <p class="sub">Precious moments on film</p>
+      </div>
+      <div class="video-grid">
+        <div class="video-item">
+          <video controls preload="metadata">
+            <source src="videos/video1.mp4" type="video/mp4">
+          </video>
+          <p class="video-caption">Ceremony</p>
+        </div>
+        <div class="video-item">
+          <video controls preload="metadata">
+            <source src="videos/video2.mp4" type="video/mp4">
+          </video>
+          <p class="video-caption">Reception</p>
+        </div>
+        <div class="video-item">
+          <video controls preload="metadata">
+            <source src="videos/video4.mp4" type="video/mp4">
+          </video>
+          <p class="video-caption">First Dance</p>
+        </div>
+        <div class="video-item">
+          <video controls preload="metadata">
+            <source src="videos/video4.mp4" type="video/mp4">
+          </video>
+          <p class="video-caption">Highlights</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WISHES -->
+  <section class="section wishes-section" id="wishes">
+    <div class="container">
+      <div class="section-title">
+        <h2>Send Your Wishes</h2>
+        <div class="ornament"><span>♥</span></div>
+        <p class="sub">Share your love and blessings with us</p>
+      </div>
+
+      <div class="wish-form-wrap">
+        <div class="form-group">
+          <label>Your Name</label>
+          <input type="text" placeholder="Enter your name" disabled style="cursor:default;">
+        </div>
+        <div class="form-group">
+          <label>Your Message</label>
+          <textarea rows="4" placeholder="Write your heartfelt wish for the couple..." disabled style="cursor:default;"></textarea>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" disabled>Send Your Wish &nbsp;♥</button>
+        <p style="text-align:center;font-size:0.78rem;color:var(--muted);margin-top:0.75rem;font-style:italic;">
+          (Form works on the live PHP server)
+        </p>
+      </div>
+
+      <p class="text-center mt-2" style="color:var(--muted);font-family:var(--font-heading);font-style:italic;">
+        Wishes submitted by guests will appear here.
+      </p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-names">Deva &amp; Ayinu</div>
+    <div class="footer-heart">♥ &nbsp; ♥ &nbsp; ♥</div>
+    <p>Wednesday, January 24, 2018</p>
+    <p>
+      <a href="gallery.php">Gallery</a> &nbsp;&middot;&nbsp;
+      <a href="#wishes">Wishes</a>   &nbsp;&middot;&nbsp;
+      <a href="upload.php">Upload</a>
+    </p>
+    <p style="margin-top:1.5rem;font-size:0.72rem;opacity:0.35;">Made with love ♥</p>
+  </footer>
+
+  <script>
+    document.getElementById('navToggle').addEventListener('click', function () {
+      document.getElementById('navLinks').classList.toggle('open');
+    });
+    var nav = document.getElementById('siteNav');
+    var hero = document.getElementById('hero');
+    function updateNav() {
+      nav.classList.toggle('on-hero', hero.getBoundingClientRect().bottom > 68);
+    }
+    window.addEventListener('scroll', updateNav, { passive: true });
+    updateNav();
+  </script>
+</body>
+</html>

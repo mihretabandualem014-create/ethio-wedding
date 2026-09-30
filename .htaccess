@@ -1,13 +1,12 @@
 # Disable directory listing
 Options -Indexes
 
-# Protect sensitive files from direct browser access
+# Protect db.php from direct browser access
 <Files "db.php">
-  Order allow,deny
-  Deny from all
+  Require all denied
 </Files>
 
-# Prevent admin.php from being cached by browsers/proxies
+# Prevent admin.php from being cached
 <Files "admin.php">
   <IfModule mod_headers.c>
     Header always set Cache-Control "no-store, no-cache, must-revalidate"
@@ -21,20 +20,4 @@ Options -Indexes
   Header always set X-Frame-Options         "SAMEORIGIN"
   Header always set X-XSS-Protection        "1; mode=block"
   Header always set Referrer-Policy         "strict-origin-when-cross-origin"
-</IfModule>
-
-# Force HTTPS — uncomment once SSL is active in cPanel
-# <IfModule mod_rewrite.c>
-#   RewriteEngine On
-#   RewriteCond %{HTTPS} off
-#   RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-# </IfModule>
-
-# PHP upload limits
-<IfModule mod_php.c>
-  php_flag  display_errors      Off
-  php_flag  log_errors          On
-  php_value upload_max_filesize 12M
-  php_value post_max_size       13M
-  php_value max_execution_time  60
 </IfModule>

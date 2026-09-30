@@ -1,5 +1,6 @@
 Options -Indexes
-DirectoryIndex index.php index.html
+RewriteEngine On
+RewriteRule ^$ /index.php [L]
 
 # php -- BEGIN cPanel-generated handler, do not edit
 # Set the "alt-php81" package as the default "PHP" programming language.

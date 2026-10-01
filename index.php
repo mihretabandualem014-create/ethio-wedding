@@ -162,7 +162,7 @@ try {
       <p class="hero-tagline">Happily Ever After</p>
       <div class="hero-cta">
         <a href="#wishes" class="btn btn-primary">Leave a Wish &nbsp;♥</a>
-        <a href="#gallery" class="btn btn-outline">View Gallery</a>
+        <a href="#share" class="btn btn-outline">Share a Moment</a>
       </div>
     </div>
     <div class="hero-scroll" onclick="document.getElementById('gallery').scrollIntoView({behavior:'smooth'})">

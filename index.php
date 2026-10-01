@@ -393,6 +393,29 @@ try {
   </footer>
 
   <script>
+    async function guestResizeImage(file, maxPx) {
+      return new Promise(function(resolve) {
+        var img = new Image();
+        var url = URL.createObjectURL(file);
+        img.onload = function() {
+          URL.revokeObjectURL(url);
+          var w = img.naturalWidth, h = img.naturalHeight;
+          if (w > maxPx || h > maxPx) {
+            if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
+            else        { w = Math.round(w * maxPx / h); h = maxPx; }
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          canvas.toBlob(function(blob) {
+            resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+          }, 'image/jpeg', 0.88);
+        };
+        img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+      });
+    }
+
     function previewGuestPhoto(input) {
       var file = input.files[0];
       if (!file) return;
@@ -400,9 +423,23 @@ try {
       var url = URL.createObjectURL(file);
       preview.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:220px;border-radius:var(--radius);margin:1rem auto;display:block;">';
       document.getElementById('guestSubmitBtn').style.display = 'block';
-      document.getElementById('guestSubmitBtn').addEventListener('click', function() {
-        this.textContent = 'Uploading…'; this.disabled = true;
-      }, { once: true });
+    }
+
+    var guestForm = document.querySelector('.share-form');
+    if (guestForm) {
+      guestForm.addEventListener('submit', async function(e) {
+        var input = document.getElementById('guestPhotoInput');
+        var btn   = document.getElementById('guestSubmitBtn');
+        if (!input.files.length) return;
+        e.preventDefault();
+        btn.textContent = 'Resizing…'; btn.disabled = true;
+        var resized = await guestResizeImage(input.files[0], 1600);
+        try {
+          var dt = new DataTransfer(); dt.items.add(resized); input.files = dt.files;
+        } catch(err) {}
+        btn.textContent = 'Uploading…';
+        guestForm.submit();
+      });
     }
     function showAllGuestPhotos() {
       document.querySelectorAll('#share .gallery-hidden').forEach(function(el) { el.style.display = ''; });

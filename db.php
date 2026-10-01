@@ -23,8 +23,8 @@ define('WEDDING_DATE_ISO', '2018-01-24T10:00:00');
 
 // Upload settings
 define('UPLOAD_DIR',      __DIR__ . '/uploads/');
-define('MAX_FILE_SIZE',   10 * 1024 * 1024); // 10 MB
-define('MAX_IMAGE_WIDTH', 1000);             // px
+define('MAX_FILE_SIZE',   50 * 1024 * 1024); // 50 MB (client-side resizes before upload)
+define('MAX_IMAGE_WIDTH', 1600);             // px
 define('JPEG_QUALITY',    85);
 
 // Admin password — change this before deploying!

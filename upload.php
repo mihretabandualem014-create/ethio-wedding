@@ -279,13 +279,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photos'])) {
       });
     }
 
-    // Disable submit button while uploading to prevent double-submit
+    // Resize image client-side before upload (handles huge RAW/DSC files)
+    async function resizeBeforeUpload(file, maxPx) {
+      return new Promise(function(resolve) {
+        var img = new Image();
+        var url = URL.createObjectURL(file);
+        img.onload = function() {
+          URL.revokeObjectURL(url);
+          var w = img.naturalWidth, h = img.naturalHeight;
+          if (w > maxPx || h > maxPx) {
+            if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
+            else        { w = Math.round(w * maxPx / h); h = maxPx; }
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          canvas.toBlob(function(blob) {
+            var name = file.name.replace(/\.[^.]+$/, '.jpg');
+            resolve(new File([blob], name, { type: 'image/jpeg' }));
+          }, 'image/jpeg', 0.88);
+        };
+        img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+      });
+    }
+
     var form = document.getElementById('uploadForm');
     if (form) {
-      form.addEventListener('submit', function () {
-        var btn = document.getElementById('submitBtn');
+      form.addEventListener('submit', async function(e) {
+        var input = document.getElementById('photoInput');
+        var btn   = document.getElementById('submitBtn');
+        if (!input.files.length) return;
+
+        e.preventDefault();
+        btn.disabled = true;
+
+        var origFiles = Array.from(input.files);
+        var resized   = [];
+
+        for (var i = 0; i < origFiles.length; i++) {
+          btn.textContent = 'Resizing ' + (i + 1) + ' of ' + origFiles.length + '…';
+          resized.push(await resizeBeforeUpload(origFiles[i], 1600));
+        }
+
+        try {
+          var dt = new DataTransfer();
+          resized.forEach(function(f) { dt.items.add(f); });
+          input.files = dt.files;
+        } catch(err) { /* DataTransfer not supported — submit originals */ }
+
         btn.textContent = 'Uploading…';
-        btn.disabled    = true;
+        form.submit();
       });
     }
   </script>

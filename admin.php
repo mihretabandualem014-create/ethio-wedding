@@ -71,45 +71,48 @@ function resizeAndSave(string $source, string $dest, int $maxWidth, int $quality
 $uploadSuccess = false;
 $uploadError   = '';
 
-if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
-    $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    $file      = $_FILES['photo'];
-    $errorCode = $file['error'];
+$uploadedCount = 0;
+$uploadErrors  = [];
 
-    if ($errorCode !== UPLOAD_ERR_OK) {
-        $msgs = [
-            UPLOAD_ERR_INI_SIZE   => 'File exceeds server upload limit.',
-            UPLOAD_ERR_FORM_SIZE  => 'File exceeds form size limit.',
-            UPLOAD_ERR_PARTIAL    => 'File was only partially uploaded.',
-            UPLOAD_ERR_NO_FILE    => 'No file was selected.',
-            UPLOAD_ERR_NO_TMP_DIR => 'Missing temporary folder.',
-            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk.',
-        ];
-        $uploadError = $msgs[$errorCode] ?? 'Upload failed.';
-    } elseif ($file['size'] > MAX_FILE_SIZE) {
-        $uploadError = 'File is too large. Maximum 10 MB.';
+if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photos'])) {
+    $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    $files = $_FILES['photos'];
+    $count = count($files['name']);
+
+    if (!is_dir(UPLOAD_DIR) || !is_writable(UPLOAD_DIR)) {
+        $uploadError = 'uploads/ directory is missing or not writable.';
     } else {
-        $info = @getimagesize($file['tmp_name']);
-        if (!$info || !in_array($info['mime'], $allowedMimes, true)) {
-            $uploadError = 'Invalid file. Please upload a JPEG, PNG, GIF, or WebP image.';
-        } elseif (!is_dir(UPLOAD_DIR) || !is_writable(UPLOAD_DIR)) {
-            $uploadError = 'uploads/ directory is missing or not writable.';
-        } else {
+        for ($i = 0; $i < $count; $i++) {
+            $errorCode = $files['error'][$i];
+            $tmpName   = $files['tmp_name'][$i];
+            $size      = $files['size'][$i];
+            $origName  = $files['name'][$i];
+
+            if ($errorCode === UPLOAD_ERR_NO_FILE) continue;
+            if ($errorCode !== UPLOAD_ERR_OK) { $uploadErrors[] = htmlspecialchars($origName) . ': upload error.'; continue; }
+            if ($size > MAX_FILE_SIZE) { $uploadErrors[] = htmlspecialchars($origName) . ': too large.'; continue; }
+
+            $info = @getimagesize($tmpName);
+            if (!$info || !in_array($info['mime'], $allowedMimes, true)) {
+                $uploadErrors[] = htmlspecialchars($origName) . ': not a valid image.';
+                continue;
+            }
             $filename = uniqid('admin_', true) . '.jpg';
             $destPath = UPLOAD_DIR . $filename;
-            if (!resizeAndSave($file['tmp_name'], $destPath, MAX_IMAGE_WIDTH, JPEG_QUALITY)) {
-                $uploadError = 'Failed to process the image.';
-            } else {
-                try {
-                    $stmt = getDB()->prepare('INSERT INTO photos (filename) VALUES (?)');
-                    $stmt->execute([$filename]);
-                    $uploadSuccess = true;
-                } catch (PDOException $e) {
-                    @unlink($destPath);
-                    $uploadError = 'Failed to save to database.';
-                }
+            if (!resizeAndSave($tmpName, $destPath, MAX_IMAGE_WIDTH, JPEG_QUALITY)) {
+                $uploadErrors[] = htmlspecialchars($origName) . ': could not process.';
+                continue;
+            }
+            try {
+                getDB()->prepare('INSERT INTO photos (filename) VALUES (?)')->execute([$filename]);
+                $uploadedCount++;
+            } catch (PDOException $e) {
+                @unlink($destPath);
+                $uploadErrors[] = htmlspecialchars($origName) . ': failed to save.';
             }
         }
+        $uploadSuccess = $uploadedCount > 0;
+        if (!empty($uploadErrors)) $uploadError = implode('<br>', $uploadErrors);
     }
 }
 
@@ -152,7 +155,7 @@ if ($loggedIn) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Great+Vibes&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <style>
     .admin-wrap   { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
     .admin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2.5rem; flex-wrap: wrap; gap: 1rem; }
@@ -213,7 +216,7 @@ if ($loggedIn) {
 
   <!-- Flash messages -->
   <?php if ($uploadSuccess): ?>
-    <div class="alert alert-success" style="margin-bottom:1.5rem;">✓ Photo uploaded successfully.</div>
+    <div class="alert alert-success" style="margin-bottom:1.5rem;">✓ <?= $uploadedCount ?> photo<?= $uploadedCount !== 1 ? 's' : '' ?> uploaded successfully.</div>
   <?php endif; ?>
   <?php if ($uploadError): ?>
     <div class="alert alert-error" style="margin-bottom:1.5rem;"><?= htmlspecialchars($uploadError) ?></div>
@@ -228,13 +231,13 @@ if ($loggedIn) {
     <form method="POST" action="admin.php" enctype="multipart/form-data" id="adminUploadForm">
       <div class="upload-zone" id="adminUploadZone">
         <div id="adminUzIcon" style="font-size:2.5rem;margin-bottom:.5rem;">📷</div>
-        <strong>Click to select or drag &amp; drop</strong>
-        <p style="color:var(--gray);margin:.25rem 0 0;font-size:.85rem;">JPEG · PNG · GIF · WebP — max 10 MB</p>
-        <input type="file" id="adminPhotoInput" name="photo" accept="image/*" required
+        <strong>Click to select photos — multiple allowed</strong>
+        <p style="color:var(--gray);margin:.25rem 0 0;font-size:.85rem;">JPEG · PNG · GIF · WebP — drag &amp; drop OK</p>
+        <input type="file" id="adminPhotoInput" name="photos[]" accept="image/*" multiple required
                style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="adminHandleSelect(this)">
       </div>
-      <div id="adminFilePreview" style="margin-top:.5rem;font-size:.85rem;color:var(--gray);"></div>
-      <button type="submit" class="btn btn-primary" id="adminSubmitBtn" style="margin-top:1.25rem;width:100%;">Upload Photo</button>
+      <div id="adminFilePreview" style="margin-top:.5rem;"></div>
+      <button type="submit" class="btn btn-primary" id="adminSubmitBtn" style="margin-top:1.25rem;width:100%;">Upload Photos</button>
     </form>
   </div>
 
@@ -272,15 +275,25 @@ if ($loggedIn) {
 
 <script>
   function adminHandleSelect(input) {
-    var file = input.files[0];
-    if (!file) return;
+    var files   = input.files;
+    if (!files.length) return;
     var preview = document.getElementById('adminFilePreview');
-    preview.textContent = '📎 ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)';
-    if (file.type.indexOf('image/') === 0) {
-      var url  = URL.createObjectURL(file);
-      var icon = document.getElementById('adminUzIcon');
-      icon.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:140px;border-radius:var(--radius);display:block;margin:0 auto .5rem;" alt="Preview">';
+    var icon    = document.getElementById('adminUzIcon');
+    icon.textContent = '📷';
+    preview.innerHTML = '';
+    var grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:0.5rem;margin-top:0.75rem;';
+    for (var i = 0; i < files.length; i++) {
+      (function(file) {
+        if (file.type.indexOf('image/') !== 0) return;
+        var img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--radius);';
+        grid.appendChild(img);
+      })(files[i]);
     }
+    preview.appendChild(grid);
+    document.getElementById('adminSubmitBtn').textContent = 'Upload ' + files.length + ' Photo' + (files.length !== 1 ? 's' : '');
   }
 
   var zone = document.getElementById('adminUploadZone');
@@ -298,12 +311,50 @@ if ($loggedIn) {
     });
   }
 
+  async function adminResizeImage(file, maxPx) {
+    return new Promise(function(resolve) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function() {
+        URL.revokeObjectURL(url);
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxPx || h > maxPx) {
+          if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
+          else        { w = Math.round(w * maxPx / h); h = maxPx; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob) {
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+        }, 'image/jpeg', 0.88);
+      };
+      img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
   var form = document.getElementById('adminUploadForm');
   if (form) {
-    form.addEventListener('submit', function(){
-      var btn = document.getElementById('adminSubmitBtn');
-      btn.textContent = 'Uploading…';
+    form.addEventListener('submit', async function(e) {
+      var input = document.getElementById('adminPhotoInput');
+      var btn   = document.getElementById('adminSubmitBtn');
+      if (!input.files.length) return;
+      e.preventDefault();
       btn.disabled = true;
+      var origFiles = Array.from(input.files);
+      var resized   = [];
+      for (var i = 0; i < origFiles.length; i++) {
+        btn.textContent = 'Resizing ' + (i + 1) + ' of ' + origFiles.length + '…';
+        resized.push(await adminResizeImage(origFiles[i], 1600));
+      }
+      try {
+        var dt = new DataTransfer();
+        resized.forEach(function(f) { dt.items.add(f); });
+        input.files = dt.files;
+      } catch(err) {}
+      btn.textContent = 'Uploading…';
+      form.submit();
     });
   }
 </script>

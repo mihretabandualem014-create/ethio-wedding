@@ -126,6 +126,11 @@ try {
     $stmt   = getDB()->query('SELECT name, message FROM wishes ORDER BY id DESC');
     $wishes = $stmt->fetchAll();
 } catch (PDOException $e) {}
+
+$videos = [];
+try {
+    $videos = getDB()->query('SELECT filename, title FROM videos ORDER BY id ASC')->fetchAll();
+} catch (PDOException $e) {}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -229,6 +234,10 @@ try {
   </div>
 
   <!-- VIDEOS -->
+  <?php if (!empty($videos)): ?>
+  <?php
+    $vMimeMap = ['mp4'=>'video/mp4','webm'=>'video/webm','mov'=>'video/quicktime','avi'=>'video/x-msvideo','ogv'=>'video/ogg'];
+  ?>
   <section class="section video-section" id="videos">
     <div class="container">
       <div class="section-title">
@@ -237,44 +246,19 @@ try {
         <p class="sub">Precious moments on film</p>
       </div>
       <div class="video-grid">
-
-        <!-- VIDEO 1 — replace src with your file, e.g. "videos/ceremony.mp4"
-             Or for YouTube: replace the <video> block with:
-             <iframe src="https://www.youtube.com/embed/VIDEO_ID" allowfullscreen></iframe> -->
-        <div class="video-item">
-          <video controls preload="metadata">
-            <source src="videos/video1.mp4" type="video/mp4">
-          </video>
-          <p class="video-caption">Ceremony</p>
-        </div>
-
-        <!-- VIDEO 2 -->
-        <div class="video-item">
-          <video controls preload="metadata">
-            <source src="videos/video2.mp4" type="video/mp4">
-          </video>
-          <p class="video-caption">Reception</p>
-        </div>
-
-        <!-- VIDEO 3 -->
-        <div class="video-item">
-          <video controls preload="metadata">
-            <source src="videos/video3.mp4" type="video/mp4">
-          </video>
-          <p class="video-caption">First Dance</p>
-        </div>
-
-        <!-- VIDEO 4 — delete this block if you only have 3 videos -->
-        <div class="video-item">
-          <video controls preload="metadata">
-            <source src="videos/video4.mp4" type="video/mp4">
-          </video>
-          <p class="video-caption">Highlights</p>
-        </div>
-
+        <?php foreach ($videos as $v): ?>
+          <?php $vExt = strtolower(pathinfo($v['filename'], PATHINFO_EXTENSION)); $vType = $vMimeMap[$vExt] ?? 'video/mp4'; ?>
+          <div class="video-item">
+            <video controls preload="metadata">
+              <source src="videos/<?= htmlspecialchars($v['filename']) ?>" type="<?= $vType ?>">
+            </video>
+            <p class="video-caption"><?= htmlspecialchars($v['title']) ?></p>
+          </div>
+        <?php endforeach; ?>
       </div>
     </div>
   </section>
+  <?php endif; ?>
 
   <!-- SHARE YOUR MOMENTS -->
   <section class="section share-section" id="share">

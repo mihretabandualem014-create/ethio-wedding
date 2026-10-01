@@ -22,3 +22,11 @@ CREATE TABLE IF NOT EXISTS `guest_photos` (
   `uploaded_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `videos` (
+  `id`          INT          NOT NULL AUTO_INCREMENT,
+  `filename`    VARCHAR(255) NOT NULL,
+  `title`       VARCHAR(255) NOT NULL DEFAULT 'Video',
+  `uploaded_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

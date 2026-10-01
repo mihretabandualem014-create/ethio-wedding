@@ -27,6 +27,10 @@ define('MAX_FILE_SIZE',   50 * 1024 * 1024); // 50 MB (client-side resizes befor
 define('MAX_IMAGE_WIDTH', 1600);             // px
 define('JPEG_QUALITY',    85);
 
+// Video settings
+define('VIDEO_DIR',      __DIR__ . '/videos/');
+define('VIDEO_MAX_SIZE', 500 * 1024 * 1024); // 500 MB
+
 // Admin password — change this before deploying!
 define('ADMIN_PASSWORD', 'adminwedding123!');
 

@@ -134,6 +134,90 @@ if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_i
     }
 }
 
+// ── Handle video upload ───────────────────────────────────────────────────────
+$videoSuccess      = false;
+$videoError        = '';
+$uploadedVideoCount = 0;
+
+if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file'])) {
+    $file  = $_FILES['video_file'];
+    $title = trim($_POST['video_title'] ?? '') ?: 'Video';
+
+    if ($file['error'] === UPLOAD_ERR_INI_SIZE || $file['error'] === UPLOAD_ERR_FORM_SIZE) {
+        $videoError = 'Video too large for server limit. Upload via cPanel File Manager then use "Add existing" instead.';
+    } elseif ($file['error'] !== UPLOAD_ERR_OK) {
+        $videoError = 'Upload error (code ' . $file['error'] . ').';
+    } elseif ($file['size'] > VIDEO_MAX_SIZE) {
+        $videoError = 'Video too large (max 500 MB).';
+    } else {
+        $allowedExts = ['mp4', 'webm', 'mov', 'avi', 'ogv'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExts, true)) {
+            $videoError = 'Not a valid video format. Use MP4, WebM, or MOV.';
+        } elseif (!is_dir(VIDEO_DIR) && !mkdir(VIDEO_DIR, 0755, true)) {
+            $videoError = 'videos/ directory could not be created.';
+        } elseif (!is_writable(VIDEO_DIR)) {
+            $videoError = 'videos/ directory is not writable.';
+        } else {
+            $filename = uniqid('video_', true) . '.' . $ext;
+            $destPath = VIDEO_DIR . $filename;
+            if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+                $videoError = 'Could not save video file.';
+            } else {
+                try {
+                    getDB()->prepare('INSERT INTO videos (filename, title) VALUES (?, ?)')
+                           ->execute([$filename, mb_substr($title, 0, 255)]);
+                    $videoSuccess       = true;
+                    $uploadedVideoCount = 1;
+                } catch (PDOException $e) {
+                    @unlink($destPath);
+                    $videoError = 'Failed to save to database.';
+                }
+            }
+        }
+    }
+}
+
+// ── Handle register existing video ───────────────────────────────────────────
+$registerVideoMsg = '';
+if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_existing_video'])) {
+    $existingFile  = basename(trim($_POST['existing_video_filename'] ?? ''));
+    $existingTitle = trim($_POST['existing_video_title'] ?? '') ?: 'Video';
+    $allowedExts   = ['mp4', 'webm', 'mov', 'avi', 'ogv'];
+    $ext           = strtolower(pathinfo($existingFile, PATHINFO_EXTENSION));
+    if (!$existingFile || !in_array($ext, $allowedExts, true)) {
+        $registerVideoMsg = 'error:Invalid filename or extension.';
+    } elseif (!file_exists(VIDEO_DIR . $existingFile)) {
+        $registerVideoMsg = 'error:File not found in videos/ directory.';
+    } else {
+        try {
+            getDB()->prepare('INSERT INTO videos (filename, title) VALUES (?, ?)')
+                   ->execute([$existingFile, mb_substr($existingTitle, 0, 255)]);
+            $registerVideoMsg = 'ok:Video registered successfully.';
+        } catch (PDOException $e) {
+            $registerVideoMsg = 'error:Database error.';
+        }
+    }
+}
+
+// ── Handle video delete ───────────────────────────────────────────────────────
+$videoDeleteMsg = '';
+if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_video_id'])) {
+    $deleteVideoId = (int) $_POST['delete_video_id'];
+    try {
+        $stmt = getDB()->prepare('SELECT filename FROM videos WHERE id = ?');
+        $stmt->execute([$deleteVideoId]);
+        $row = $stmt->fetch();
+        if ($row) {
+            getDB()->prepare('DELETE FROM videos WHERE id = ?')->execute([$deleteVideoId]);
+            @unlink(VIDEO_DIR . $row['filename']);
+            $videoDeleteMsg = 'Video deleted.';
+        }
+    } catch (PDOException $e) {
+        $videoDeleteMsg = 'Could not delete video.';
+    }
+}
+
 // ── Fetch all photos ─────────────────────────────────────────────────────────
 $photos  = [];
 $dbError = false;
@@ -143,6 +227,16 @@ if ($loggedIn) {
         $photos = $stmt->fetchAll();
     } catch (PDOException $e) {
         $dbError = true;
+    }
+}
+
+// ── Fetch all videos ─────────────────────────────────────────────────────────
+$videos = [];
+if ($loggedIn) {
+    try {
+        $videos = getDB()->query('SELECT id, filename, title FROM videos ORDER BY id DESC')->fetchAll();
+    } catch (PDOException $e) {
+        // table may not exist yet — run setup.sql in phpMyAdmin
     }
 }
 ?>
@@ -266,6 +360,109 @@ if ($loggedIn) {
     </div>
   <?php endif; ?>
 
+  <!-- ── VIDEO MANAGEMENT ──────────────────────────────────────── -->
+  <div style="border-top:1px solid #e9ddd6;margin-top:3rem;padding-top:3rem;">
+
+    <div class="admin-header" style="margin-bottom:1.5rem;">
+      <div class="admin-title">Video Management</div>
+      <div style="color:var(--gray);font-size:.9rem;"><?= count($videos) ?> video<?= count($videos) !== 1 ? 's' : '' ?></div>
+    </div>
+
+    <?php if ($videoSuccess): ?>
+      <div class="alert alert-success" style="margin-bottom:1.5rem;">&#10003; Video uploaded successfully.</div>
+    <?php endif; ?>
+    <?php if ($videoError): ?>
+      <div class="alert alert-error" style="margin-bottom:1.5rem;"><?= htmlspecialchars($videoError) ?></div>
+    <?php endif; ?>
+    <?php if ($videoDeleteMsg): ?>
+      <div class="alert <?= strpos($videoDeleteMsg, 'Video deleted') === 0 ? 'alert-success' : 'alert-error' ?>" style="margin-bottom:1.5rem;"><?= htmlspecialchars($videoDeleteMsg) ?></div>
+    <?php endif; ?>
+    <?php if ($registerVideoMsg): ?>
+      <?php [$rmType, $rmText] = explode(':', $registerVideoMsg, 2); ?>
+      <div class="alert <?= $rmType === 'ok' ? 'alert-success' : 'alert-error' ?>" style="margin-bottom:1.5rem;"><?= htmlspecialchars($rmText) ?></div>
+    <?php endif; ?>
+
+    <!-- Video upload form -->
+    <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:1.75rem 1.5rem;margin-bottom:2.5rem;">
+      <h2 style="font-family:var(--font-heading);font-size:1.4rem;color:var(--dark);margin-bottom:1.25rem;">Upload a Video</h2>
+      <p style="color:var(--gray);font-size:.85rem;margin-bottom:1.25rem;">
+        Formats: MP4, WebM, MOV &mdash; max 500&thinsp;MB.
+        For larger files, upload directly via cPanel File&nbsp;Manager to the <code>videos/</code> folder,
+        then use the &ldquo;Add existing file&rdquo; form below.
+      </p>
+      <form method="POST" action="admin.php" enctype="multipart/form-data" id="videoUploadForm">
+        <div style="display:grid;gap:1rem;grid-template-columns:1fr 1fr;">
+          <div class="form-group" style="margin:0;">
+            <label style="display:block;font-size:.85rem;color:var(--dark);margin-bottom:.35rem;">Title / Caption</label>
+            <input type="text" name="video_title" placeholder="e.g. Ceremony" maxlength="255"
+                   style="width:100%;padding:.65rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.95rem;box-sizing:border-box;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="display:block;font-size:.85rem;color:var(--dark);margin-bottom:.35rem;">Video File</label>
+            <input type="file" name="video_file" id="videoFileInput" accept="video/mp4,video/webm,video/quicktime,video/*" required
+                   style="width:100%;padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;box-sizing:border-box;background:#fafafa;cursor:pointer;"
+                   onchange="videoHandleSelect(this)">
+          </div>
+        </div>
+        <div id="videoFileInfo" style="margin-top:.75rem;font-size:.85rem;color:var(--gray);"></div>
+        <button type="submit" class="btn btn-primary" id="videoSubmitBtn" style="margin-top:1.25rem;">Upload Video</button>
+      </form>
+    </div>
+
+    <!-- Add existing file from server -->
+    <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:1.25rem 1.5rem;margin-bottom:2.5rem;">
+      <h3 style="font-family:var(--font-heading);font-size:1.1rem;color:var(--dark);margin-bottom:.75rem;">Add existing file from server</h3>
+      <p style="color:var(--gray);font-size:.83rem;margin-bottom:.9rem;">
+        If you already uploaded a video to the <code>videos/</code> folder via cPanel File Manager, register it here.
+      </p>
+      <form method="POST" action="admin.php" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <label style="display:block;font-size:.83rem;color:var(--dark);margin-bottom:.3rem;">Filename (e.g. ceremony.mp4)</label>
+          <input type="text" name="existing_video_filename" placeholder="ceremony.mp4" maxlength="255" required
+                 style="padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;width:220px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:.83rem;color:var(--dark);margin-bottom:.3rem;">Title</label>
+          <input type="text" name="existing_video_title" placeholder="Ceremony" maxlength="255"
+                 style="padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;width:160px;">
+        </div>
+        <button type="submit" name="register_existing_video" value="1" class="btn btn-outline" style="padding:.65rem 1.25rem;">Register</button>
+      </form>
+    </div>
+
+    <!-- Video grid -->
+    <h2 style="font-family:var(--font-heading);font-size:1.4rem;color:var(--dark);margin-bottom:1rem;">Videos</h2>
+
+    <?php if (empty($videos)): ?>
+      <div class="empty-state">
+        <div style="font-size:3rem;">🎬</div>
+        <p style="margin-top:.5rem;">No videos yet. Upload your first one above.</p>
+      </div>
+    <?php else: ?>
+      <?php
+        $vMimeMap = ['mp4'=>'video/mp4','webm'=>'video/webm','mov'=>'video/quicktime','avi'=>'video/x-msvideo','ogv'=>'video/ogg'];
+      ?>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem;">
+        <?php foreach ($videos as $v): ?>
+          <?php $vExt = strtolower(pathinfo($v['filename'], PATHINFO_EXTENSION)); $vType = $vMimeMap[$vExt] ?? 'video/mp4'; ?>
+          <div style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;">
+            <video controls preload="metadata" style="width:100%;display:block;max-height:190px;background:#111;">
+              <source src="videos/<?= htmlspecialchars($v['filename']) ?>" type="<?= $vType ?>">
+            </video>
+            <div style="padding:.65rem 1rem;display:flex;align-items:center;gap:.5rem;">
+              <span style="flex:1;font-size:.9rem;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($v['title']) ?></span>
+              <form method="POST" action="admin.php" style="flex-shrink:0;" onsubmit="return confirm('Delete this video? This cannot be undone.');">
+                <input type="hidden" name="delete_video_id" value="<?= $v['id'] ?>">
+                <button type="submit" class="btn-delete" title="Delete video">&times;</button>
+              </form>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+  </div>
+
   <div style="margin-top:3rem;text-align:center;">
     <a href="index.php" class="btn btn-outline">← Back to site</a>
   </div>
@@ -355,6 +552,24 @@ if ($loggedIn) {
       } catch(err) {}
       btn.textContent = 'Uploading…';
       form.submit();
+    });
+  }
+
+  function videoHandleSelect(input) {
+    var file = input.files[0];
+    if (!file) return;
+    var info = document.getElementById('videoFileInfo');
+    var mb   = (file.size / 1024 / 1024).toFixed(1);
+    info.textContent = file.name + ' — ' + mb + ' MB';
+    document.getElementById('videoSubmitBtn').textContent = 'Upload Video';
+  }
+
+  var vForm = document.getElementById('videoUploadForm');
+  if (vForm) {
+    vForm.addEventListener('submit', function() {
+      var btn = document.getElementById('videoSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Uploading… (large files may take a while)';
     });
   }
 </script>

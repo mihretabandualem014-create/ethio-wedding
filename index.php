@@ -185,7 +185,7 @@ try {
         <div class="gallery-grid" id="galleryGrid">
           <?php foreach ($previewPhotos as $i => $photo): ?>
             <?php $src = 'uploads/' . htmlspecialchars($photo['filename']); ?>
-            <div class="gallery-item<?= $i >= 8 ? ' gallery-hidden' : '' ?>" onclick="openLightbox('<?= $src ?>')">
+            <div class="gallery-item<?= $i >= 8 ? ' gallery-hidden' : '' ?>" onclick="openLightbox(<?= $i ?>, 'admin')">
               <img src="<?= $src ?>" alt="Wedding photo" loading="lazy">
             </div>
           <?php endforeach; ?>
@@ -202,9 +202,19 @@ try {
   </section>
 
   <!-- LIGHTBOX -->
-  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-    <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
-    <img id="lightboxImg" src="" alt="Full size photo" onclick="event.stopPropagation()">
+  <div class="lightbox" id="lightbox">
+    <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">&times;</button>
+    <span class="lb-counter" id="lbCounter"></span>
+    <button class="lb-nav lb-prev" onclick="shiftPhoto(-1)" aria-label="Previous">&#8249;</button>
+    <div class="lb-img-wrap" id="lbImgWrap">
+      <img id="lightboxImg" src="" alt="Full size photo">
+    </div>
+    <button class="lb-nav lb-next" onclick="shiftPhoto(1)" aria-label="Next">&#8250;</button>
+    <div class="lb-toolbar">
+      <button class="lb-tool-btn" onclick="lbZoomOut()">&#8722; Zoom</button>
+      <button class="lb-tool-btn" onclick="lbZoomIn()">&#43; Zoom</button>
+      <a id="lbDownload" href="" download class="lb-tool-btn">&#8595; Download</a>
+    </div>
   </div>
 
   <!-- VIDEOS -->
@@ -293,7 +303,7 @@ try {
         <div class="gallery-grid mt-3">
           <?php foreach ($guestPhotos as $i => $photo): ?>
             <?php $src = 'uploads/' . htmlspecialchars($photo['filename']); ?>
-            <div class="gallery-item<?= $i >= 8 ? ' gallery-hidden' : '' ?>" onclick="openLightbox('<?= $src ?>')">
+            <div class="gallery-item<?= $i >= 8 ? ' gallery-hidden' : '' ?>" onclick="openLightbox(<?= $i ?>, 'guest')">
               <img src="<?= $src ?>" alt="Guest photo" loading="lazy">
             </div>
           <?php endforeach; ?>
@@ -416,8 +426,14 @@ try {
     window.addEventListener('scroll', updateNav, { passive: true });
     updateNav();
 
-    function openLightbox(src) {
-      document.getElementById('lightboxImg').src = src;
+    var lbAdmin = [<?php foreach ($previewPhotos as $p) { echo '"uploads/' . addslashes($p['filename']) . '",'; } ?>];
+    var lbGuest = [<?php foreach ($guestPhotos as $p) { echo '"uploads/' . addslashes($p['filename']) . '",'; } ?>];
+    var lbPhotos = [], lbIndex = 0, lbZoom = 1;
+
+    function openLightbox(index, group) {
+      lbPhotos = group === 'guest' ? lbGuest : lbAdmin;
+      lbIndex = index; lbZoom = 1;
+      _lbRender();
       document.getElementById('lightbox').classList.add('open');
       document.body.style.overflow = 'hidden';
     }
@@ -425,8 +441,57 @@ try {
       document.getElementById('lightbox').classList.remove('open');
       document.getElementById('lightboxImg').src = '';
       document.body.style.overflow = '';
+      lbZoom = 1; _lbApplyZoom();
     }
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLightbox(); });
+    function shiftPhoto(dir) {
+      lbIndex = (lbIndex + dir + lbPhotos.length) % lbPhotos.length;
+      lbZoom = 1; _lbRender();
+    }
+    function _lbRender() {
+      var src = lbPhotos[lbIndex];
+      document.getElementById('lightboxImg').src = src;
+      document.getElementById('lbCounter').textContent = (lbIndex + 1) + ' / ' + lbPhotos.length;
+      var dl = document.getElementById('lbDownload');
+      dl.href = src; dl.download = src.split('/').pop();
+      _lbApplyZoom();
+    }
+    function lbZoomIn()  { lbZoom = Math.min(lbZoom + 0.5, 4); _lbApplyZoom(); }
+    function lbZoomOut() { lbZoom = Math.max(lbZoom - 0.5, 1); _lbApplyZoom(); }
+    function _lbApplyZoom() {
+      var img = document.getElementById('lightboxImg');
+      var wrap = document.getElementById('lbImgWrap');
+      if (lbZoom > 1) {
+        img.style.maxWidth = 'none'; img.style.maxHeight = 'none';
+        img.style.width = (88 * lbZoom) + 'vw'; img.style.height = 'auto';
+      } else {
+        img.style.maxWidth = '88vw'; img.style.maxHeight = '76vh';
+        img.style.width = ''; img.style.height = '';
+      }
+      wrap.classList.toggle('zoomed', lbZoom > 1);
+    }
+    document.getElementById('lbImgWrap').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (lbZoom === 1) lbZoomIn(); else { lbZoom = 1; _lbApplyZoom(); }
+    });
+    document.getElementById('lightbox').addEventListener('click', function(e) {
+      if (e.target === this) closeLightbox();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (!document.getElementById('lightbox').classList.contains('open')) return;
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') shiftPhoto(-1);
+      if (e.key === 'ArrowRight') shiftPhoto(1);
+    });
+    var lbTouchX = null;
+    document.getElementById('lightbox').addEventListener('touchstart', function(e) {
+      lbTouchX = e.touches[0].clientX;
+    }, { passive: true });
+    document.getElementById('lightbox').addEventListener('touchend', function(e) {
+      if (lbTouchX === null) return;
+      var dx = e.changedTouches[0].clientX - lbTouchX;
+      if (Math.abs(dx) > 50) shiftPhoto(dx < 0 ? 1 : -1);
+      lbTouchX = null;
+    }, { passive: true });
   </script>
 </body>
 </html>

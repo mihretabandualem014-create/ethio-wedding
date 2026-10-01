@@ -129,7 +129,7 @@ try {
 
 $videos = [];
 try {
-    $videos = getDB()->query('SELECT filename, title FROM videos ORDER BY id ASC')->fetchAll();
+    $videos = getDB()->query('SELECT filename FROM videos ORDER BY id ASC')->fetchAll();
 } catch (PDOException $e) {}
 ?>
 <!DOCTYPE html>
@@ -252,7 +252,6 @@ try {
             <video controls preload="metadata">
               <source src="videos/<?= htmlspecialchars($v['filename']) ?>" type="<?= $vType ?>">
             </video>
-            <p class="video-caption"><?= htmlspecialchars($v['title']) ?></p>
           </div>
         <?php endforeach; ?>
       </div>

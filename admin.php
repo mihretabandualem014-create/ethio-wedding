@@ -141,7 +141,6 @@ $uploadedVideoCount = 0;
 
 if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_file'])) {
     $file  = $_FILES['video_file'];
-    $title = trim($_POST['video_title'] ?? '') ?: 'Video';
 
     if ($file['error'] === UPLOAD_ERR_INI_SIZE || $file['error'] === UPLOAD_ERR_FORM_SIZE) {
         $videoError = 'Video too large for server limit. Upload via cPanel File Manager then use "Add existing" instead.';
@@ -165,8 +164,7 @@ if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_f
                 $videoError = 'Could not save video file.';
             } else {
                 try {
-                    getDB()->prepare('INSERT INTO videos (filename, title) VALUES (?, ?)')
-                           ->execute([$filename, mb_substr($title, 0, 255)]);
+                    getDB()->prepare('INSERT INTO videos (filename) VALUES (?)')->execute([$filename]);
                     $videoSuccess       = true;
                     $uploadedVideoCount = 1;
                 } catch (PDOException $e) {
@@ -182,7 +180,6 @@ if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['video_f
 $registerVideoMsg = '';
 if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register_existing_video'])) {
     $existingFile  = basename(trim($_POST['existing_video_filename'] ?? ''));
-    $existingTitle = trim($_POST['existing_video_title'] ?? '') ?: 'Video';
     $allowedExts   = ['mp4', 'webm', 'mov', 'avi', 'ogv'];
     $ext           = strtolower(pathinfo($existingFile, PATHINFO_EXTENSION));
     if (!$existingFile || !in_array($ext, $allowedExts, true)) {
@@ -191,8 +188,7 @@ if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register
         $registerVideoMsg = 'error:File not found in videos/ directory.';
     } else {
         try {
-            getDB()->prepare('INSERT INTO videos (filename, title) VALUES (?, ?)')
-                   ->execute([$existingFile, mb_substr($existingTitle, 0, 255)]);
+            getDB()->prepare('INSERT INTO videos (filename) VALUES (?)')->execute([$existingFile]);
             $registerVideoMsg = 'ok:Video registered successfully.';
         } catch (PDOException $e) {
             $registerVideoMsg = 'error:Database error.';
@@ -234,7 +230,7 @@ if ($loggedIn) {
 $videos = [];
 if ($loggedIn) {
     try {
-        $videos = getDB()->query('SELECT id, filename, title FROM videos ORDER BY id DESC')->fetchAll();
+        $videos = getDB()->query('SELECT id, filename FROM videos ORDER BY id DESC')->fetchAll();
     } catch (PDOException $e) {
         // table may not exist yet — run setup.sql in phpMyAdmin
     }
@@ -391,19 +387,9 @@ if ($loggedIn) {
         then use the &ldquo;Add existing file&rdquo; form below.
       </p>
       <form method="POST" action="admin.php" enctype="multipart/form-data" id="videoUploadForm">
-        <div style="display:grid;gap:1rem;grid-template-columns:1fr 1fr;">
-          <div class="form-group" style="margin:0;">
-            <label style="display:block;font-size:.85rem;color:var(--dark);margin-bottom:.35rem;">Title / Caption</label>
-            <input type="text" name="video_title" placeholder="e.g. Ceremony" maxlength="255"
-                   style="width:100%;padding:.65rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.95rem;box-sizing:border-box;">
-          </div>
-          <div class="form-group" style="margin:0;">
-            <label style="display:block;font-size:.85rem;color:var(--dark);margin-bottom:.35rem;">Video File</label>
-            <input type="file" name="video_file" id="videoFileInput" accept="video/mp4,video/webm,video/quicktime,video/*" required
-                   style="width:100%;padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;box-sizing:border-box;background:#fafafa;cursor:pointer;"
-                   onchange="videoHandleSelect(this)">
-          </div>
-        </div>
+        <input type="file" name="video_file" id="videoFileInput" accept="video/mp4,video/webm,video/quicktime,video/*" required
+               style="width:100%;padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;box-sizing:border-box;background:#fafafa;cursor:pointer;"
+               onchange="videoHandleSelect(this)">
         <div id="videoFileInfo" style="margin-top:.75rem;font-size:.85rem;color:var(--gray);"></div>
         <button type="submit" class="btn btn-primary" id="videoSubmitBtn" style="margin-top:1.25rem;">Upload Video</button>
       </form>
@@ -419,12 +405,7 @@ if ($loggedIn) {
         <div>
           <label style="display:block;font-size:.83rem;color:var(--dark);margin-bottom:.3rem;">Filename (e.g. ceremony.mp4)</label>
           <input type="text" name="existing_video_filename" placeholder="ceremony.mp4" maxlength="255" required
-                 style="padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;width:220px;">
-        </div>
-        <div>
-          <label style="display:block;font-size:.83rem;color:var(--dark);margin-bottom:.3rem;">Title</label>
-          <input type="text" name="existing_video_title" placeholder="Ceremony" maxlength="255"
-                 style="padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;width:160px;">
+                 style="padding:.6rem .9rem;border:1px solid #ddd;border-radius:var(--radius);font-size:.9rem;width:260px;">
         </div>
         <button type="submit" name="register_existing_video" value="1" class="btn btn-outline" style="padding:.65rem 1.25rem;">Register</button>
       </form>
@@ -449,9 +430,8 @@ if ($loggedIn) {
             <video controls preload="metadata" style="width:100%;display:block;max-height:190px;background:#111;">
               <source src="videos/<?= htmlspecialchars($v['filename']) ?>" type="<?= $vType ?>">
             </video>
-            <div style="padding:.65rem 1rem;display:flex;align-items:center;gap:.5rem;">
-              <span style="flex:1;font-size:.9rem;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($v['title']) ?></span>
-              <form method="POST" action="admin.php" style="flex-shrink:0;" onsubmit="return confirm('Delete this video? This cannot be undone.');">
+            <div style="padding:.5rem .75rem;display:flex;justify-content:flex-end;">
+              <form method="POST" action="admin.php" onsubmit="return confirm('Delete this video? This cannot be undone.');">
                 <input type="hidden" name="delete_video_id" value="<?= $v['id'] ?>">
                 <button type="submit" class="btn-delete" title="Delete video">&times;</button>
               </form>

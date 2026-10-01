@@ -41,47 +41,42 @@ $guestPhotoError   = '';
 $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['guest_photo'])) {
-    $allowed   = ['image/jpeg','image/png','image/gif','image/webp'];
-    $file      = $_FILES['guest_photo'];
-    $savedFile = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['guest_photos'])) {
+    $allowed     = ['image/jpeg','image/png','image/gif','image/webp'];
+    $files       = $_FILES['guest_photos'];
+    $count       = count($files['name']);
+    $savedFiles  = [];
 
-    if ($file['error'] !== UPLOAD_ERR_OK) {
-        $guestPhotoError = 'Upload failed. Please try again.';
-    } elseif ($file['size'] > MAX_FILE_SIZE) {
-        $guestPhotoError = 'File too large.';
+    if (!is_dir(UPLOAD_DIR) || !is_writable(UPLOAD_DIR)) {
+        $guestPhotoError = 'Upload directory not writable.';
     } else {
-        $info = @getimagesize($file['tmp_name']);
-        if (!$info || !in_array($info['mime'], $allowed, true)) {
-            $guestPhotoError = 'Please upload a JPEG, PNG, GIF or WebP image.';
-        } elseif (!is_dir(UPLOAD_DIR) || !is_writable(UPLOAD_DIR)) {
-            $guestPhotoError = 'Upload directory not writable.';
-        } else {
+        for ($i = 0; $i < $count; $i++) {
+            if ($files['error'][$i] === UPLOAD_ERR_NO_FILE) continue;
+            if ($files['error'][$i] !== UPLOAD_ERR_OK) { $guestPhotoError = 'Upload failed.'; continue; }
+            if ($files['size'][$i] > MAX_FILE_SIZE)     { $guestPhotoError = 'A file was too large.'; continue; }
+            $info = @getimagesize($files['tmp_name'][$i]);
+            if (!$info || !in_array($info['mime'], $allowed, true)) { $guestPhotoError = 'Invalid image type.'; continue; }
             $filename = uniqid('guest_', true) . '.jpg';
             $destPath = UPLOAD_DIR . $filename;
-            if (!resizeAndSave($file['tmp_name'], $destPath, MAX_IMAGE_WIDTH, JPEG_QUALITY)) {
-                $guestPhotoError = 'Could not process the image.';
-            } else {
-                try {
-                    getDB()->prepare('INSERT INTO guest_photos (filename) VALUES (?)')->execute([$filename]);
-                    $savedFile = $filename;
-                } catch (PDOException $e) {
-                    @unlink($destPath);
-                    $guestPhotoError = 'Failed to save photo. Please try again.';
-                }
+            if (!resizeAndSave($files['tmp_name'][$i], $destPath, MAX_IMAGE_WIDTH, JPEG_QUALITY)) { $guestPhotoError = 'Could not process image.'; continue; }
+            try {
+                getDB()->prepare('INSERT INTO guest_photos (filename) VALUES (?)')->execute([$filename]);
+                $savedFiles[] = $filename;
+            } catch (PDOException $e) {
+                @unlink($destPath);
             }
         }
     }
 
     if ($isAjax) {
         header('Content-Type: application/json');
-        echo $guestPhotoError
-            ? json_encode(['success' => false, 'error' => $guestPhotoError])
-            : json_encode(['success' => true,  'filename' => $savedFile]);
+        echo count($savedFiles)
+            ? json_encode(['success' => true,  'filenames' => $savedFiles])
+            : json_encode(['success' => false, 'error' => $guestPhotoError ?: 'Upload failed.']);
         exit;
     }
 
-    if ($savedFile) {
+    if (count($savedFiles)) {
         header('Location: index.php?photo_shared=1#share');
         exit;
     }
@@ -305,8 +300,8 @@ try {
       <form method="POST" action="index.php#share" enctype="multipart/form-data" class="share-form">
         <label class="share-btn" for="guestPhotoInput">
           <span class="share-icon">📷</span>
-          <span>Choose Photo or Take a Picture</span>
-          <input type="file" id="guestPhotoInput" name="guest_photo" accept="image/*" required
+          <span>Choose Photos or Take a Picture</span>
+          <input type="file" id="guestPhotoInput" name="guest_photos[]" accept="image/*" multiple required
                  onchange="previewGuestPhoto(this)" style="display:none;">
         </label>
         <div id="guestPreview"></div>
@@ -443,12 +438,21 @@ try {
     }
 
     function previewGuestPhoto(input) {
-      var file = input.files[0];
-      if (!file) return;
-      var url = URL.createObjectURL(file);
-      document.getElementById('guestPreview').innerHTML =
-        '<img src="' + url + '" style="max-width:100%;max-height:220px;border-radius:var(--radius);margin:1rem auto;display:block;">';
-      document.getElementById('guestSubmitBtn').style.display = 'block';
+      var files = input.files;
+      if (!files.length) return;
+      var preview = document.getElementById('guestPreview');
+      if (files.length === 1) {
+        preview.innerHTML = '<img src="' + URL.createObjectURL(files[0]) + '" style="max-width:100%;max-height:200px;border-radius:var(--radius);margin:1rem auto;display:block;">';
+      } else {
+        var g = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:0.5rem;margin:1rem 0;">';
+        for (var i = 0; i < files.length; i++) {
+          g += '<img src="' + URL.createObjectURL(files[i]) + '" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--radius);">';
+        }
+        preview.innerHTML = g + '</div>';
+      }
+      var btn = document.getElementById('guestSubmitBtn');
+      btn.style.display = 'block';
+      btn.textContent = 'Share ' + files.length + ' Photo' + (files.length !== 1 ? 's' : '') + '  ♥';
     }
 
     var guestForm = document.querySelector('.share-form');
@@ -459,13 +463,15 @@ try {
         var btn   = document.getElementById('guestSubmitBtn');
         if (!input.files.length) return;
 
-        btn.textContent = 'Resizing…'; btn.disabled = true;
-        var resized = await guestResizeImage(input.files[0], 1600);
+        var origFiles = Array.from(input.files);
+        btn.disabled = true;
+        var fd = new FormData();
+        for (var i = 0; i < origFiles.length; i++) {
+          btn.textContent = 'Resizing ' + (i + 1) + ' of ' + origFiles.length + '…';
+          fd.append('guest_photos[]', await guestResizeImage(origFiles[i], 1600));
+        }
 
         btn.textContent = 'Uploading…';
-        var fd = new FormData();
-        fd.append('guest_photo', resized);
-
         try {
           var resp = await fetch('index.php', {
             method: 'POST',
@@ -475,30 +481,27 @@ try {
           var data = await resp.json();
 
           if (data.success) {
-            var src  = 'uploads/' + data.filename;
-            var item = document.createElement('div');
-            item.className  = 'gallery-item';
-            item.dataset.src = src;
-            item.onclick    = function() { openGuestLightbox(this); };
-            item.innerHTML  = '<img src="' + src + '" alt="Guest photo" style="width:100%;height:100%;object-fit:cover;">';
-
             var grid = document.getElementById('guestPhotoGrid');
-            if (grid) {
-              grid.prepend(item);
-            } else {
+            if (!grid) {
               grid = document.createElement('div');
               grid.className = 'gallery-grid mt-3';
               grid.id = 'guestPhotoGrid';
-              grid.appendChild(item);
               guestForm.insertAdjacentElement('afterend', grid);
             }
-
+            data.filenames.forEach(function(fname) {
+              var src  = 'uploads/' + fname;
+              var item = document.createElement('div');
+              item.className   = 'gallery-item';
+              item.dataset.src = src;
+              item.onclick     = function() { openGuestLightbox(this); };
+              item.innerHTML   = '<img src="' + src + '" alt="Guest photo" style="width:100%;height:100%;object-fit:cover;">';
+              grid.prepend(item);
+            });
             document.getElementById('guestPreview').innerHTML =
-              '<p style="color:var(--accent);font-family:var(--font-heading);font-style:italic;text-align:center;margin:1rem 0;">♥ Photo shared!</p>';
+              '<p style="color:var(--accent);font-family:var(--font-heading);font-style:italic;text-align:center;margin:1rem 0;">♥ ' + data.filenames.length + ' photo' + (data.filenames.length !== 1 ? 's' : '') + ' shared!</p>';
             input.value = '';
             btn.style.display = 'none';
             btn.disabled = false;
-            btn.textContent = 'Share This Photo  ♥';
           } else {
             document.getElementById('guestPreview').innerHTML =
               '<p style="color:#c0392b;text-align:center;margin:1rem 0;">' + (data.error || 'Upload failed.') + '</p>';
@@ -506,7 +509,7 @@ try {
             btn.disabled = false;
           }
         } catch(err) {
-          btn.textContent = 'Share This Photo  ♥';
+          btn.textContent = 'Share Photos  ♥';
           btn.disabled = false;
         }
       });

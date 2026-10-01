@@ -89,12 +89,17 @@ if ($loggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photos'
             $origName  = $files['name'][$i];
 
             if ($errorCode === UPLOAD_ERR_NO_FILE) continue;
-            if ($errorCode !== UPLOAD_ERR_OK) { $uploadErrors[] = htmlspecialchars($origName) . ': upload error.'; continue; }
-            if ($size > MAX_FILE_SIZE) { $uploadErrors[] = htmlspecialchars($origName) . ': too large.'; continue; }
+            if ($errorCode === UPLOAD_ERR_INI_SIZE || $errorCode === UPLOAD_ERR_FORM_SIZE) {
+                $uploadErrors[] = htmlspecialchars($origName) . ': file too large for server limit.'; continue;
+            }
+            if ($errorCode !== UPLOAD_ERR_OK) { $uploadErrors[] = htmlspecialchars($origName) . ': upload error (code ' . $errorCode . ').'; continue; }
+            if ($size > MAX_FILE_SIZE) { $uploadErrors[] = htmlspecialchars($origName) . ': too large (max 50 MB).'; continue; }
 
-            $info = @getimagesize($tmpName);
-            if (!$info || !in_array($info['mime'], $allowedMimes, true)) {
-                $uploadErrors[] = htmlspecialchars($origName) . ': not a valid image.';
+            // Use finfo for reliable MIME detection (handles HEIC, WebP, etc.)
+            $finfo    = new finfo(FILEINFO_MIME_TYPE);
+            $detectedMime = $finfo->file($tmpName);
+            if (!in_array($detectedMime, $allowedMimes, true)) {
+                $uploadErrors[] = htmlspecialchars($origName) . ': unsupported format (' . htmlspecialchars($detectedMime) . ').';
                 continue;
             }
             $filename = uniqid('admin_', true) . '.jpg';
@@ -309,7 +314,7 @@ if ($loggedIn) {
     <div class="alert alert-success" style="margin-bottom:1.5rem;">✓ <?= $uploadedCount ?> photo<?= $uploadedCount !== 1 ? 's' : '' ?> uploaded successfully.</div>
   <?php endif; ?>
   <?php if ($uploadError): ?>
-    <div class="alert alert-error" style="margin-bottom:1.5rem;"><?= htmlspecialchars($uploadError) ?></div>
+    <div class="alert alert-error" style="margin-bottom:1.5rem;"><?= $uploadError ?></div>
   <?php endif; ?>
   <?php if ($deleteMsg): ?>
     <div class="alert <?= strpos($deleteMsg, 'Photo') === 0 ? 'alert-success' : 'alert-error' ?>" style="margin-bottom:1.5rem;"><?= htmlspecialchars($deleteMsg) ?></div>

@@ -7,9 +7,8 @@ if (empty($_SESSION['admin'])) {
     exit;
 }
 
-$success      = false;
-$error        = '';
-$uploadedFile = '';
+$uploadedFiles = [];
+$errors        = [];
 
 $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
@@ -70,47 +69,46 @@ function resizeAndSave(string $source, string $dest, int $maxWidth, int $quality
     return $result;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $file      = $_FILES['photo'] ?? null;
-    $errorCode = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photos'])) {
+    $files = $_FILES['photos'];
+    $count = count($files['name']);
 
-    if (!$file || $errorCode !== UPLOAD_ERR_OK) {
-        $uploadErrors = [
-            UPLOAD_ERR_INI_SIZE   => 'File exceeds the server upload limit.',
-            UPLOAD_ERR_FORM_SIZE  => 'File exceeds the form size limit.',
-            UPLOAD_ERR_PARTIAL    => 'File was only partially uploaded.',
-            UPLOAD_ERR_NO_FILE    => 'No file was selected.',
-            UPLOAD_ERR_NO_TMP_DIR => 'Missing temporary folder on the server.',
-            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk.',
-        ];
-        $error = $uploadErrors[$errorCode] ?? 'Upload failed. Please try again.';
-
-    } elseif ($file['size'] > MAX_FILE_SIZE) {
-        $error = 'File is too large. Maximum allowed size is 10 MB.';
-
+    if (!is_dir(UPLOAD_DIR) || !is_writable(UPLOAD_DIR)) {
+        $errors[] = 'The uploads directory is missing or not writable.';
     } else {
-        // Validate by actual image content, not just extension
-        $info = @getimagesize($file['tmp_name']);
-        if (!$info || !in_array($info['mime'], $allowedMimes, true)) {
-            $error = 'Invalid file. Please upload a JPEG, PNG, GIF, or WebP image.';
-        } elseif (!is_dir(UPLOAD_DIR) || !is_writable(UPLOAD_DIR)) {
-            $error = 'The uploads directory is missing or not writable. Please contact the site administrator.';
-        } else {
-            $filename = uniqid('photo_', true) . '.jpg'; // always save as JPEG
-            $destPath = UPLOAD_DIR . $filename;
+        for ($i = 0; $i < $count; $i++) {
+            $errorCode = $files['error'][$i];
+            $tmpName   = $files['tmp_name'][$i];
+            $size      = $files['size'][$i];
+            $origName  = $files['name'][$i];
 
-            if (!resizeAndSave($file['tmp_name'], $destPath, MAX_IMAGE_WIDTH, JPEG_QUALITY)) {
-                $error = 'Failed to process the image. Please try another photo.';
-            } else {
-                try {
-                    $stmt = getDB()->prepare('INSERT INTO photos (filename) VALUES (?)');
-                    $stmt->execute([$filename]);
-                    $success      = true;
-                    $uploadedFile = $filename;
-                } catch (PDOException $e) {
-                    @unlink($destPath); // roll back the saved file
-                    $error = 'Failed to save the photo. Please try again.';
-                }
+            if ($errorCode === UPLOAD_ERR_NO_FILE) continue;
+
+            if ($errorCode !== UPLOAD_ERR_OK) {
+                $errors[] = htmlspecialchars($origName) . ': upload error (code ' . $errorCode . ').';
+                continue;
+            }
+            if ($size > MAX_FILE_SIZE) {
+                $errors[] = htmlspecialchars($origName) . ': file too large (max 10 MB).';
+                continue;
+            }
+            $info = @getimagesize($tmpName);
+            if (!$info || !in_array($info['mime'], $allowedMimes, true)) {
+                $errors[] = htmlspecialchars($origName) . ': not a valid image.';
+                continue;
+            }
+            $filename = uniqid('photo_', true) . '.jpg';
+            $destPath = UPLOAD_DIR . $filename;
+            if (!resizeAndSave($tmpName, $destPath, MAX_IMAGE_WIDTH, JPEG_QUALITY)) {
+                $errors[] = htmlspecialchars($origName) . ': could not process image.';
+                continue;
+            }
+            try {
+                getDB()->prepare('INSERT INTO photos (filename) VALUES (?)')->execute([$filename]);
+                $uploadedFiles[] = $filename;
+            } catch (PDOException $e) {
+                @unlink($destPath);
+                $errors[] = htmlspecialchars($origName) . ': failed to save.';
             }
         }
     }
@@ -159,39 +157,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="container">
       <div class="form-container">
 
-        <?php if ($success): ?>
+        <?php if (!empty($uploadedFiles)): ?>
 
           <div class="alert alert-success">
-            &#10003; Your photo has been uploaded successfully! Thank you for sharing this moment.
+            &#10003; <?= count($uploadedFiles) ?> photo<?= count($uploadedFiles) !== 1 ? 's' : '' ?> uploaded successfully!
           </div>
 
-          <?php if ($uploadedFile): ?>
-            <div style="text-align:center;margin-bottom:1.5rem;">
-              <img src="uploads/<?= htmlspecialchars($uploadedFile) ?>"
-                   alt="Your uploaded photo"
-                   style="max-width:100%;border-radius:var(--radius);box-shadow:var(--shadow-md);">
+          <?php if (!empty($errors)): ?>
+            <div class="alert alert-error" style="margin-top:0.75rem;">
+              <?php foreach ($errors as $e): ?><div><?= $e ?></div><?php endforeach; ?>
             </div>
           <?php endif; ?>
 
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0.75rem;margin:1.5rem 0;">
+            <?php foreach ($uploadedFiles as $f): ?>
+              <img src="uploads/<?= htmlspecialchars($f) ?>" alt="Uploaded photo"
+                   style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--radius);">
+            <?php endforeach; ?>
+          </div>
+
           <div style="display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;">
-            <a href="gallery.php" class="btn btn-primary">View Gallery</a>
-            <a href="upload.php"  class="btn btn-outline">Upload Another</a>
+            <a href="index.php#gallery" class="btn btn-primary">View Gallery</a>
+            <a href="upload.php" class="btn btn-outline">Upload More</a>
           </div>
 
         <?php else: ?>
 
-          <?php if ($error): ?>
-            <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
+          <?php if (!empty($errors)): ?>
+            <div class="alert alert-error">
+              <?php foreach ($errors as $e): ?><div><?= $e ?></div><?php endforeach; ?>
+            </div>
           <?php endif; ?>
 
           <form method="POST" action="upload.php" enctype="multipart/form-data" id="uploadForm">
             <div class="form-group">
               <div class="upload-zone" id="uploadZone">
                 <div class="uz-icon" id="uzIcon">📷</div>
-                <strong>Click to select a photo</strong>
-                <p>or drag &amp; drop here</p>
-                <p class="uz-hint">JPEG &middot; PNG &middot; GIF &middot; WebP &mdash; max 10 MB</p>
-                <input type="file" id="photoInput" name="photo" accept="image/*" required
+                <strong>Click to select photos</strong>
+                <p>or drag &amp; drop here &mdash; multiple allowed</p>
+                <p class="uz-hint">JPEG &middot; PNG &middot; GIF &middot; WebP &mdash; max 10 MB each</p>
+                <input type="file" id="photoInput" name="photos[]" accept="image/*" multiple required
                        style="position:absolute;inset:0;opacity:0;cursor:pointer;"
                        onchange="handleSelect(this)">
               </div>
@@ -199,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <button type="submit" class="btn btn-gold" style="width:100%;" id="submitBtn">
-              Upload Photo
+              Upload Photos
             </button>
           </form>
 
@@ -229,19 +234,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 
     function handleSelect(input) {
-      var file = input.files[0];
-      if (!file) return;
-
+      var files   = input.files;
+      if (!files.length) return;
       var preview = document.getElementById('filePreview');
-      var sizeKB  = (file.size / 1024).toFixed(0);
-      preview.textContent = '📎 ' + file.name + ' (' + sizeKB + ' KB)';
-
-      if (file.type.indexOf('image/') === 0) {
-        var url  = URL.createObjectURL(file);
-        var icon = document.getElementById('uzIcon');
-        icon.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:160px;'
-          + 'border-radius:var(--radius);margin:0 auto 0.5rem;display:block;" alt="Preview">';
+      var icon    = document.getElementById('uzIcon');
+      icon.textContent = '📷';
+      preview.innerHTML = '';
+      var grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:0.5rem;margin-top:0.75rem;';
+      for (var i = 0; i < files.length; i++) {
+        (function(file) {
+          if (file.type.indexOf('image/') !== 0) return;
+          var url = URL.createObjectURL(file);
+          var img = document.createElement('img');
+          img.src = url;
+          img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--radius);';
+          grid.appendChild(img);
+        })(files[i]);
       }
+      preview.appendChild(grid);
+      document.getElementById('submitBtn').textContent = 'Upload ' + files.length + ' Photo' + (files.length !== 1 ? 's' : '');
     }
 
     // Drag & drop

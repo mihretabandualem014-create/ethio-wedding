@@ -1,5 +1,11 @@
 <?php
+session_start();
 require_once 'db.php';
+
+if (empty($_SESSION['admin'])) {
+    header('Location: admin.php');
+    exit;
+}
 
 $success      = false;
 $error        = '';

@@ -1,6 +1,82 @@
 <?php
 require_once 'db.php';
 
+// ── Image resize helper ─────────────────────────────────────────────────────
+function resizeAndSave(string $source, string $dest, int $maxWidth, int $quality): bool {
+    $info = @getimagesize($source);
+    if (!$info) return false;
+    $mime = $info['mime'];
+    switch ($mime) {
+        case 'image/jpeg': $img = @imagecreatefromjpeg($source); break;
+        case 'image/png':  $img = @imagecreatefrompng($source);  break;
+        case 'image/gif':  $img = @imagecreatefromgif($source);  break;
+        case 'image/webp': $img = @imagecreatefromwebp($source); break;
+        default: return false;
+    }
+    if (!$img) return false;
+    if ($mime === 'image/jpeg' && function_exists('exif_read_data')) {
+        $exif = @exif_read_data($source);
+        if (!empty($exif['Orientation'])) {
+            switch ((int)$exif['Orientation']) {
+                case 3: $img = imagerotate($img, 180, 0); break;
+                case 6: $img = imagerotate($img, -90, 0); break;
+                case 8: $img = imagerotate($img,  90, 0); break;
+            }
+        }
+    }
+    $w = imagesx($img); $h = imagesy($img);
+    if ($w <= $maxWidth) { $r = imagejpeg($img, $dest, $quality); imagedestroy($img); return $r; }
+    $ratio = $maxWidth / $w; $newH = (int)round($h * $ratio);
+    $canvas = imagecreatetruecolor($maxWidth, $newH);
+    imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+    imagecopyresampled($canvas, $img, 0, 0, 0, 0, $maxWidth, $newH, $w, $h);
+    $r = imagejpeg($canvas, $dest, $quality);
+    imagedestroy($img); imagedestroy($canvas);
+    return $r;
+}
+
+// ── Handle guest photo upload ───────────────────────────────────────────────
+$guestPhotoSuccess = isset($_GET['photo_shared']);
+$guestPhotoError   = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['guest_photo'])) {
+    $allowed = ['image/jpeg','image/png','image/gif','image/webp'];
+    $file    = $_FILES['guest_photo'];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $guestPhotoError = 'Upload failed. Please try again.';
+    } elseif ($file['size'] > MAX_FILE_SIZE) {
+        $guestPhotoError = 'File too large (max 10 MB).';
+    } else {
+        $info = @getimagesize($file['tmp_name']);
+        if (!$info || !in_array($info['mime'], $allowed, true)) {
+            $guestPhotoError = 'Please upload a JPEG, PNG, GIF or WebP image.';
+        } elseif (!is_dir(UPLOAD_DIR) || !is_writable(UPLOAD_DIR)) {
+            $guestPhotoError = 'Upload directory not writable.';
+        } else {
+            $filename = uniqid('guest_', true) . '.jpg';
+            $destPath = UPLOAD_DIR . $filename;
+            if (!resizeAndSave($file['tmp_name'], $destPath, MAX_IMAGE_WIDTH, JPEG_QUALITY)) {
+                $guestPhotoError = 'Could not process the image.';
+            } else {
+                try {
+                    getDB()->prepare('INSERT INTO guest_photos (filename) VALUES (?)')->execute([$filename]);
+                    header('Location: index.php?photo_shared=1#share');
+                    exit;
+                } catch (PDOException $e) {
+                    @unlink($destPath);
+                    $guestPhotoError = 'Failed to save photo. Please try again.';
+                }
+            }
+        }
+    }
+}
+
+// ── Fetch guest photos ──────────────────────────────────────────────────────
+$guestPhotos = [];
+try {
+    $guestPhotos = getDB()->query('SELECT filename FROM guest_photos ORDER BY id DESC')->fetchAll();
+} catch (PDOException $e) {}
+
 // ── Handle wish submission ──────────────────────────────────────────────────
 $wishSuccess = isset($_GET['wished']);
 $wishError   = '';
@@ -66,6 +142,7 @@ try {
         <li><a href="#gallery">Gallery</a></li>
         <li><a href="#videos">Videos</a></li>
         <li><a href="#wishes">Wishes</a></li>
+        <li><a href="#share">Share Photo</a></li>
       </ul>
     </div>
   </nav>
@@ -178,6 +255,58 @@ try {
     </div>
   </section>
 
+  <!-- SHARE YOUR MOMENTS -->
+  <section class="section share-section" id="share">
+    <div class="container">
+      <div class="section-title">
+        <h2>Share Your Moments</h2>
+        <div class="ornament"><span>📷</span></div>
+        <p class="sub">Take a photo or choose from your gallery</p>
+      </div>
+
+      <?php if ($guestPhotoSuccess): ?>
+        <div class="alert alert-success" style="max-width:480px;margin:0 auto 2rem;">
+          ♥ Your photo has been shared! Thank you.
+        </div>
+      <?php endif; ?>
+
+      <?php if ($guestPhotoError): ?>
+        <div class="alert alert-error" style="max-width:480px;margin:0 auto 2rem;">
+          <?= htmlspecialchars($guestPhotoError) ?>
+        </div>
+      <?php endif; ?>
+
+      <form method="POST" action="index.php#share" enctype="multipart/form-data" class="share-form">
+        <label class="share-btn" for="guestPhotoInput">
+          <span class="share-icon">📷</span>
+          <span>Choose Photo or Take a Picture</span>
+          <input type="file" id="guestPhotoInput" name="guest_photo" accept="image/*" required
+                 onchange="previewGuestPhoto(this)" style="display:none;">
+        </label>
+        <div id="guestPreview"></div>
+        <button type="submit" class="btn btn-primary" id="guestSubmitBtn" style="display:none;width:100%;max-width:320px;margin:1rem auto 0;">
+          Share This Photo &nbsp;♥
+        </button>
+      </form>
+
+      <?php if (!empty($guestPhotos)): ?>
+        <div class="gallery-grid mt-3">
+          <?php foreach ($guestPhotos as $i => $photo): ?>
+            <?php $src = 'uploads/' . htmlspecialchars($photo['filename']); ?>
+            <div class="gallery-item<?= $i >= 8 ? ' gallery-hidden' : '' ?>" onclick="openLightbox('<?= $src ?>')">
+              <img src="<?= $src ?>" alt="Guest photo" loading="lazy">
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <?php if (count($guestPhotos) > 8): ?>
+          <div class="text-center mt-3">
+            <button class="btn btn-outline" id="viewMoreGuestBtn" onclick="showAllGuestPhotos()">View More</button>
+          </div>
+        <?php endif; ?>
+      <?php endif; ?>
+    </div>
+  </section>
+
   <!-- WISHES -->
   <section class="section wishes-section" id="wishes">
     <div class="container">
@@ -247,14 +376,31 @@ try {
     <p><?= htmlspecialchars(WEDDING_DATE) ?></p>
     <p>
       <a href="#gallery">Gallery</a> &nbsp;&middot;&nbsp;
-      <a href="#wishes">Wishes</a>
+      <a href="#wishes">Wishes</a> &nbsp;&middot;&nbsp;
+      <a href="#share">Share Photo</a>
     </p>
     <p style="margin-top:1.5rem;font-size:0.72rem;opacity:0.35;">Made with love ♥</p>
   </footer>
 
   <script>
+    function previewGuestPhoto(input) {
+      var file = input.files[0];
+      if (!file) return;
+      var preview = document.getElementById('guestPreview');
+      var url = URL.createObjectURL(file);
+      preview.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:220px;border-radius:var(--radius);margin:1rem auto;display:block;">';
+      document.getElementById('guestSubmitBtn').style.display = 'block';
+      document.getElementById('guestSubmitBtn').addEventListener('click', function() {
+        this.textContent = 'Uploading…'; this.disabled = true;
+      }, { once: true });
+    }
+    function showAllGuestPhotos() {
+      document.querySelectorAll('#share .gallery-hidden').forEach(function(el) { el.style.display = ''; });
+      var btn = document.getElementById('viewMoreGuestBtn');
+      if (btn) btn.style.display = 'none';
+    }
     function showAllPhotos() {
-      document.querySelectorAll('.gallery-hidden').forEach(function(el) { el.style.display = ''; });
+      document.querySelectorAll('#gallery .gallery-hidden').forEach(function(el) { el.style.display = ''; });
       document.getElementById('viewMoreBtn').style.display = 'none';
     }
 

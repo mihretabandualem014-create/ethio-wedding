@@ -505,3 +505,16 @@ h1,h2,h3,h4 { font-family: var(--font-heading); font-weight: 400; line-height: 1
   .gallery-grid   { grid-template-columns: repeat(2, 1fr); gap: 3px; }
   .gallery-mosaic { gap: 3px; grid-template-rows: 130px 110px 110px; }
 }
+
+/* ── Guest Share Section ─────────────────────────────────────────────────── */
+.share-section { background: var(--bg); }
+.share-form { display: flex; flex-direction: column; align-items: center; gap: 0; max-width: 480px; margin: 0 auto; }
+.share-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.6rem; width: 100%; padding: 2rem 1.5rem;
+  border: 2px dashed var(--gold); border-radius: var(--radius);
+  cursor: pointer; color: var(--accent); font-family: var(--font-heading);
+  font-size: 1.05rem; letter-spacing: 0.04em; transition: background 0.2s;
+}
+.share-btn:hover { background: rgba(var(--gold-rgb, 180,148,93), 0.07); }
+.share-icon { font-size: 2.2rem; }

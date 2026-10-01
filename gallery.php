@@ -129,9 +129,9 @@ try {
     function openLightbox(index) {
       lbIndex = index;
       lbZoom  = 1;
-      _lbRender();
       document.getElementById('lightbox').classList.add('open');
       document.body.style.overflow = 'hidden';
+      _lbRender();
     }
 
     function closeLightbox() {
@@ -151,10 +151,10 @@ try {
     function _lbRender() {
       var src = lbPhotos[lbIndex];
       document.getElementById('lightboxImg').src = src;
-      document.getElementById('lbCounter').textContent = (lbIndex + 1) + ' / ' + lbPhotos.length;
+      var counter = document.getElementById('lbCounter');
+      if (counter) counter.textContent = (lbIndex + 1) + ' / ' + lbPhotos.length;
       var dl = document.getElementById('lbDownload');
-      dl.href     = src;
-      dl.download = src.split('/').pop();
+      if (dl) { dl.href = src; dl.download = src.split('/').pop(); }
       _lbApplyZoom();
     }
 
@@ -164,6 +164,7 @@ try {
     function _lbApplyZoom() {
       var img  = document.getElementById('lightboxImg');
       var wrap = document.getElementById('lbImgWrap');
+      if (!img) return;
       if (lbZoom > 1) {
         img.style.maxWidth  = 'none';
         img.style.maxHeight = 'none';
@@ -175,11 +176,11 @@ try {
         img.style.width     = '';
         img.style.height    = '';
       }
-      wrap.classList.toggle('zoomed', lbZoom > 1);
+      if (wrap) wrap.classList.toggle('zoomed', lbZoom > 1);
     }
 
-    // Click image to toggle zoom
-    document.getElementById('lbImgWrap').addEventListener('click', function (e) {
+    var lbWrap = document.getElementById('lbImgWrap');
+    if (lbWrap) lbWrap.addEventListener('click', function (e) {
       e.stopPropagation();
       if (lbZoom === 1) lbZoomIn(); else { lbZoom = 1; _lbApplyZoom(); }
     });

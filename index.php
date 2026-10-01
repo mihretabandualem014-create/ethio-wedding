@@ -433,9 +433,9 @@ try {
     function openLightbox(index, group) {
       lbPhotos = group === 'guest' ? lbGuest : lbAdmin;
       lbIndex = index; lbZoom = 1;
-      _lbRender();
       document.getElementById('lightbox').classList.add('open');
       document.body.style.overflow = 'hidden';
+      _lbRender();
     }
     function closeLightbox() {
       document.getElementById('lightbox').classList.remove('open');
@@ -450,16 +450,18 @@ try {
     function _lbRender() {
       var src = lbPhotos[lbIndex];
       document.getElementById('lightboxImg').src = src;
-      document.getElementById('lbCounter').textContent = (lbIndex + 1) + ' / ' + lbPhotos.length;
+      var counter = document.getElementById('lbCounter');
+      if (counter) counter.textContent = (lbIndex + 1) + ' / ' + lbPhotos.length;
       var dl = document.getElementById('lbDownload');
-      dl.href = src; dl.download = src.split('/').pop();
+      if (dl) { dl.href = src; dl.download = src.split('/').pop(); }
       _lbApplyZoom();
     }
     function lbZoomIn()  { lbZoom = Math.min(lbZoom + 0.5, 4); _lbApplyZoom(); }
     function lbZoomOut() { lbZoom = Math.max(lbZoom - 0.5, 1); _lbApplyZoom(); }
     function _lbApplyZoom() {
-      var img = document.getElementById('lightboxImg');
+      var img  = document.getElementById('lightboxImg');
       var wrap = document.getElementById('lbImgWrap');
+      if (!img) return;
       if (lbZoom > 1) {
         img.style.maxWidth = 'none'; img.style.maxHeight = 'none';
         img.style.width = (88 * lbZoom) + 'vw'; img.style.height = 'auto';
@@ -467,9 +469,10 @@ try {
         img.style.maxWidth = '88vw'; img.style.maxHeight = '76vh';
         img.style.width = ''; img.style.height = '';
       }
-      wrap.classList.toggle('zoomed', lbZoom > 1);
+      if (wrap) wrap.classList.toggle('zoomed', lbZoom > 1);
     }
-    document.getElementById('lbImgWrap').addEventListener('click', function(e) {
+    var lbWrap = document.getElementById('lbImgWrap');
+    if (lbWrap) lbWrap.addEventListener('click', function(e) {
       e.stopPropagation();
       if (lbZoom === 1) lbZoomIn(); else { lbZoom = 1; _lbApplyZoom(); }
     });
